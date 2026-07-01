@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { supabase } from "./supabaseClient";
 
 // ── BRAND TOKENS ──────────────────────────────────────────────
 const C = {
@@ -20,20 +21,45 @@ const C = {
   green: "#27AE60",
 };
 
-// ── STORAGE HELPERS ───────────────────────────────────────────
-const STORAGE_KEY = "graybrief_user";
+// ── DATA LAYER (Supabase) ─────────────────────────────────────
+// One row per user in public.user_data: { user_id, organizer, checklists, contacts }.
+// Row-Level Security guarantees each user only ever sees their own row.
+const DEFAULT_DATA = { organizer: {}, checklists: {}, contacts: [] };
 
-async function saveData(key, value) {
-  try { await window.storage.set(key, JSON.stringify(value)); } catch {}
+function sessionToUser(session) {
+  if (!session?.user) return null;
+  const u = session.user;
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.user_metadata?.name || u.email,
+  };
 }
-async function loadData(key) {
-  try {
-    const r = await window.storage.get(key);
-    return r ? JSON.parse(r.value) : null;
-  } catch { return null; }
+
+async function fetchUserData(userId) {
+  const { data, error } = await supabase
+    .from("user_data")
+    .select("organizer, checklists, contacts")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) {
+    console.error("fetchUserData error:", error.message);
+    return { ...DEFAULT_DATA };
+  }
+  if (!data) return { ...DEFAULT_DATA };
+  return {
+    organizer: data.organizer || {},
+    checklists: data.checklists || {},
+    contacts: data.contacts || [],
+  };
 }
-async function deleteData(key) {
-  try { await window.storage.delete(key); } catch {}
+
+async function saveUserSection(userId, section, value) {
+  const { error } = await supabase
+    .from("user_data")
+    .upsert({ user_id: userId, [section]: value }, { onConflict: "user_id" });
+  if (error) console.error("saveUserSection error:", error.message);
+  return !error;
 }
 
 // ── ICONS ──────────────────────────────────────────────────────
@@ -112,33 +138,54 @@ const SectionHeader = ({ eyebrow, title }) => (
 );
 
 // ── AUTH SCREEN ───────────────────────────────────────────────
-const AuthScreen = ({ onAuth }) => {
+// Uses Supabase Auth. On success the auth listener in App takes over.
+const AuthScreen = () => {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handle = async () => {
-    setError("");
+    setError(""); setInfo("");
     if (!email || !password) { setError("Email and password are required."); return; }
     if (mode === "signup" && !name) { setError("Your name is required."); return; }
     if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
     setLoading(true);
-    const userKey = `user_${email.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
     if (mode === "signup") {
-      const existing = await loadData(userKey);
-      if (existing) { setError("An account with this email already exists."); setLoading(false); return; }
-      const user = { email, name, password, createdAt: new Date().toISOString() };
-      await saveData(userKey, user);
-      onAuth({ email, name, userKey });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { name } },
+      });
+      if (error) { setError(error.message); setLoading(false); return; }
+      // If email confirmation is ON, no session comes back yet.
+      if (!data.session) {
+        setInfo("Account created. Check your email to confirm, then sign in.");
+        setMode("login");
+        setPassword("");
+      }
+      // If a session came back, App's auth listener signs the user in automatically.
     } else {
-      const user = await loadData(userKey);
-      if (!user || user.password !== password) { setError("Invalid email or password."); setLoading(false); return; }
-      onAuth({ email: user.email, name: user.name, userKey });
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) { setError(error.message); setLoading(false); return; }
+      // App's auth listener takes over from here.
     }
     setLoading(false);
+  };
+
+  const handleReset = async () => {
+    setError(""); setInfo("");
+    if (!email) { setError("Enter your email above first, then tap reset."); return; }
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    setLoading(false);
+    if (error) { setError(error.message); return; }
+    setInfo("Password reset link sent. Check your email.");
   };
 
   return (
@@ -152,7 +199,7 @@ const AuthScreen = ({ onAuth }) => {
           <div style={{ marginBottom: 24 }}>
             <div style={{ display: "flex", gap: 0, background: C.bg2, borderRadius: 100, padding: 3 }}>
               {["login", "signup"].map(m => (
-                <button key={m} onClick={() => { setMode(m); setError(""); }}
+                <button key={m} onClick={() => { setMode(m); setError(""); setInfo(""); }}
                   style={{ flex: 1, padding: "9px 0", border: "none", borderRadius: 100, fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "system-ui", transition: "all 0.15s", background: mode === m ? C.paper : "transparent", color: mode === m ? C.ink : C.ink3, boxShadow: mode === m ? "0 1px 4px rgba(0,0,0,0.08)" : "none" }}>
                   {m === "login" ? "Sign in" : "Create account"}
                 </button>
@@ -168,12 +215,65 @@ const AuthScreen = ({ onAuth }) => {
                 <Icon name="alert" size={14} color={C.red} /> {error}
               </div>
             )}
+            {info && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#EAFAF1", borderRadius: 10, color: "#1E8449", fontSize: 13, fontFamily: "system-ui" }}>
+                <Icon name="check" size={14} color="#1E8449" /> {info}
+              </div>
+            )}
             <Btn onClick={handle} disabled={loading} style={{ width: "100%", justifyContent: "center" }}>
               {loading ? "One moment..." : mode === "login" ? "Sign in" : "Create account"}
             </Btn>
+            {mode === "login" && (
+              <button onClick={handleReset} disabled={loading}
+                style={{ background: "none", border: "none", cursor: loading ? "not-allowed" : "pointer", color: C.ink3, fontSize: 13, fontFamily: "system-ui", textAlign: "center", padding: 0, textDecoration: "underline" }}>
+                Forgot your password?
+              </button>
+            )}
           </div>
           <div style={{ marginTop: 20, padding: "14px 16px", background: C.bg2, borderRadius: 10, fontSize: 12, color: C.ink3, fontFamily: "system-ui", lineHeight: 1.5 }}>
             GrayBrief is an organizational tool, not a secure document vault. Do not store passwords or full account numbers. See our Terms of Service for full data usage details.
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+// ── RECOVERY SCREEN ───────────────────────────────────────────
+// Shown when the user returns via a password-reset email link.
+const RecoveryScreen = ({ onDone }) => {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    setError("");
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    setLoading(false);
+    if (error) { setError(error.message); return; }
+    onDone();
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ width: "100%", maxWidth: 420 }}>
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <Logo size="lg" />
+          <div style={{ marginTop: 12, fontSize: 15, color: C.ink2, fontFamily: "Georgia, serif", fontStyle: "italic" }}>Set a new password</div>
+        </div>
+        <Card>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <Input label="New password" type="password" value={password} onChange={setPassword} placeholder="6+ characters" required />
+            {error && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#FDEDEC", borderRadius: 10, color: C.red, fontSize: 13, fontFamily: "system-ui" }}>
+                <Icon name="alert" size={14} color={C.red} /> {error}
+              </div>
+            )}
+            <Btn onClick={submit} disabled={loading} style={{ width: "100%", justifyContent: "center" }}>
+              {loading ? "Updating..." : "Update password"}
+            </Btn>
           </div>
         </Card>
       </div>
@@ -190,7 +290,6 @@ const NAV_ITEMS = [
 ];
 
 const Nav = ({ active, setActive, onLogout, userName }) => {
-  const [mobileOpen, setMobileOpen] = useState(false);
   return (
     <>
       {/* Desktop sidebar */}
@@ -672,40 +771,47 @@ const ContactCard = ({ contact, onRemove, catColor }) => (
 export default function App() {
   const [user, setUser] = useState(null);
   const [activeNav, setActiveNav] = useState("dashboard");
-  const [userData, setUserData] = useState({ organizer: {}, checklists: {}, contacts: [] });
-  const [loading, setLoading] = useState(true);
+  const [userData, setUserData] = useState(DEFAULT_DATA);
+  const [loading, setLoading] = useState(true);      // initial auth check
+  const [dataReady, setDataReady] = useState(false); // signed-in user's data loaded
+  const [recovery, setRecovery] = useState(false);   // password-reset flow
 
+  // Auth: read the initial session and subscribe to changes.
   useEffect(() => {
-    (async () => {
-      const saved = await loadData(STORAGE_KEY);
-      if (saved) {
-        setUser(saved.user);
-        setUserData(saved.data || { organizer: {}, checklists: {}, contacts: [] });
-      }
+    let mounted = true;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      setUser(sessionToUser(session));
       setLoading(false);
-    })();
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") setRecovery(true);
+      if (event === "SIGNED_OUT") setActiveNav("dashboard");
+      setUser(sessionToUser(session));
+    });
+    return () => { mounted = false; sub.subscription.unsubscribe(); };
   }, []);
 
-  const onAuth = async (u) => {
-    setUser(u);
-    const existing = await loadData(`${STORAGE_KEY}_${u.userKey}`);
-    const data = existing || { organizer: {}, checklists: {}, contacts: [] };
-    setUserData(data);
-    await saveData(STORAGE_KEY, { user: u, data });
-  };
+  // Load the signed-in user's data whenever the user changes.
+  useEffect(() => {
+    if (!user) { setUserData(DEFAULT_DATA); setDataReady(false); return; }
+    let mounted = true;
+    setDataReady(false);
+    (async () => {
+      const data = await fetchUserData(user.id);
+      if (mounted) { setUserData(data); setDataReady(true); }
+    })();
+    return () => { mounted = false; };
+  }, [user?.id]);
 
   const saveSection = useCallback(async (section, value) => {
-    const updated = { ...userData, [section]: value };
-    setUserData(updated);
-    await saveData(STORAGE_KEY, { user, data: updated });
-    if (user?.userKey) await saveData(`${STORAGE_KEY}_${user.userKey}`, updated);
-  }, [userData, user]);
+    setUserData(prev => ({ ...prev, [section]: value }));
+    if (user?.id) await saveUserSection(user.id, section, value);
+  }, [user?.id]);
 
   const onLogout = async () => {
-    await deleteData(STORAGE_KEY);
-    setUser(null);
-    setUserData({ organizer: {}, checklists: {}, contacts: [] });
-    setActiveNav("dashboard");
+    await supabase.auth.signOut();
+    // The auth listener clears the user and resets the nav.
   };
 
   if (loading) return (
@@ -714,7 +820,15 @@ export default function App() {
     </div>
   );
 
-  if (!user) return <AuthScreen onAuth={onAuth} />;
+  if (recovery) return <RecoveryScreen onDone={() => setRecovery(false)} />;
+
+  if (!user) return <AuthScreen />;
+
+  if (!dataReady) return (
+    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <Logo size="lg" />
+    </div>
+  );
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: C.bg, fontFamily: "system-ui, sans-serif" }}>
