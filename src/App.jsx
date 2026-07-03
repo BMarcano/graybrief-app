@@ -48,6 +48,7 @@ function sessionToUser(session) {
     id: u.id,
     email: u.email,
     name: u.user_metadata?.name || u.email,
+    createdAt: u.created_at,
   };
 }
 
@@ -123,14 +124,14 @@ const Btn = ({ children, onClick, variant = "primary", size = "md", disabled = f
     ghost: { background: "transparent", color: C.ink2, padding: size === "sm" ? "8px 16px" : "11px 22px", fontSize: size === "sm" ? 13 : 15, border: `1px solid ${C.line2}` },
     danger: { background: C.red, color: "#fff", padding: size === "sm" ? "8px 16px" : "11px 22px", fontSize: size === "sm" ? 13 : 15 },
   };
-  return <button onClick={onClick} disabled={disabled} style={{ ...base, ...variants[variant] }}>{children}</button>;
+  return <button className="gb-btn" onClick={onClick} disabled={disabled} style={{ ...base, ...variants[variant] }}>{children}</button>;
 };
 
 // ── INPUT ─────────────────────────────────────────────────────
 const Input = ({ label, value, onChange, type = "text", placeholder = "", required = false }) => (
   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
     {label && <label style={{ fontSize: 12, fontWeight: 600, color: C.ink2, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "system-ui" }}>{label}{required && " *"}</label>}
-    <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+    <input className="gb-input" type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
       style={{ border: `1px solid ${C.line2}`, borderRadius: 10, padding: "11px 16px", fontSize: 15, fontFamily: "system-ui", color: C.ink, background: C.paper, outline: "none", width: "100%", boxSizing: "border-box" }} />
   </div>
 );
@@ -138,14 +139,17 @@ const Input = ({ label, value, onChange, type = "text", placeholder = "", requir
 const Textarea = ({ label, value, onChange, placeholder = "", rows = 3 }) => (
   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
     {label && <label style={{ fontSize: 12, fontWeight: 600, color: C.ink2, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "system-ui" }}>{label}</label>}
-    <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows}
+    <textarea className="gb-input" value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows}
       style={{ border: `1px solid ${C.line2}`, borderRadius: 10, padding: "11px 16px", fontSize: 15, fontFamily: "system-ui", color: C.ink, background: C.paper, outline: "none", width: "100%", boxSizing: "border-box", resize: "vertical" }} />
   </div>
 );
 
 // ── CARD ──────────────────────────────────────────────────────
-const Card = ({ children, style = {} }) => (
-  <div style={{ background: C.paper, border: `1px solid ${C.line}`, borderRadius: 16, padding: 28, boxShadow: "0 2px 16px rgba(0,0,0,0.04)", ...style }}>{children}</div>
+const Card = ({ children, style = {}, className = "", ...rest }) => (
+  <div className={("gb-card " + className).trim()}
+    {...(rest.onClick ? { "data-clickable": "true" } : {})}
+    {...rest}
+    style={{ background: C.paper, border: `1px solid ${C.line}`, borderRadius: 16, padding: 28, boxShadow: "0 2px 16px rgba(0,0,0,0.04)", ...style }}>{children}</div>
 );
 
 // ── SECTION HEADER ────────────────────────────────────────────
@@ -209,7 +213,7 @@ const AuthScreen = () => {
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ width: "100%", maxWidth: 420 }}>
+      <div className="gb-page" style={{ width: "100%", maxWidth: 420 }}>
         <div style={{ textAlign: "center", marginBottom: 40 }}>
           <Logo size="lg" />
           <div style={{ marginTop: 12, fontSize: 15, color: C.ink2, fontFamily: "Georgia, serif", fontStyle: "italic" }}>Your AAYL emergency toolkit</div>
@@ -306,7 +310,6 @@ const NAV_ITEMS = [
   { id: "organizer", label: "Document Organizer", icon: "file" },
   { id: "checklists", label: "Checklists", icon: "check" },
   { id: "contacts", label: "Emergency Contacts", icon: "phone" },
-  { id: "account", label: "My Account", icon: "user" },
 ];
 
 const Nav = ({ active, setActive, onLogout, userName }) => {
@@ -316,7 +319,8 @@ const Nav = ({ active, setActive, onLogout, userName }) => {
   const navLinks = (onNavigate) => (
     <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
       {NAV_ITEMS.map(item => (
-        <button key={item.id} onClick={() => { setActive(item.id); if (onNavigate) onNavigate(); }}
+        <button key={item.id} className="gb-navbtn" data-active={active === item.id ? "true" : "false"}
+          onClick={() => { setActive(item.id); if (onNavigate) onNavigate(); }}
           style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 12px", borderRadius: 10, border: "none", cursor: "pointer", fontFamily: "system-ui", fontSize: 14, fontWeight: active === item.id ? 600 : 400, transition: "all 0.15s", background: active === item.id ? C.accent : "transparent", color: active === item.id ? "#fff" : C.darkInk2, textAlign: "left" }}>
           <Icon name={item.icon} size={16} color={active === item.id ? "#fff" : C.darkInk2} />
           {item.label}
@@ -325,15 +329,20 @@ const Nav = ({ active, setActive, onLogout, userName }) => {
     </nav>
   );
 
-  const userFooter = (
-    <div style={{ borderTop: `1px solid #2A2720`, paddingTop: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, paddingLeft: 4 }}>
-        <div style={{ width: 32, height: 32, borderRadius: "50%", background: C.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+  const userFooter = (onNavigate) => (
+    <div style={{ borderTop: `1px solid #2A2720`, paddingTop: 12 }}>
+      <button className="gb-navbtn" data-active={active === "account" ? "true" : "false"}
+        onClick={() => { setActive("account"); if (onNavigate) onNavigate(); }}
+        style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, padding: "8px 8px", width: "100%", borderRadius: 10, border: "none", cursor: "pointer", background: active === "account" ? C.accent : "transparent", textAlign: "left" }}>
+        <div style={{ width: 32, height: 32, borderRadius: "50%", background: active === "account" ? "rgba(255,255,255,0.25)" : C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "system-ui" }}>{userName?.[0]?.toUpperCase()}</span>
         </div>
-        <div style={{ fontSize: 13, color: C.darkInk, fontFamily: "system-ui", fontWeight: 500 }}>{userName}</div>
-      </div>
-      <button onClick={onLogout} style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", border: "none", cursor: "pointer", color: C.darkInk2, fontSize: 13, fontFamily: "system-ui", padding: "8px 4px" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, color: active === "account" ? "#fff" : C.darkInk, fontFamily: "system-ui", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{userName}</div>
+          <div style={{ fontSize: 11, color: active === "account" ? "rgba(255,255,255,0.8)" : C.darkInk2, fontFamily: "system-ui" }}>My Account</div>
+        </div>
+      </button>
+      <button onClick={onLogout} style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", border: "none", cursor: "pointer", color: C.darkInk2, fontSize: 13, fontFamily: "system-ui", padding: "8px 8px" }}>
         <Icon name="logout" size={14} color={C.darkInk2} /> Sign out
       </button>
     </div>
@@ -351,8 +360,8 @@ const Nav = ({ active, setActive, onLogout, userName }) => {
       {/* Drawer */}
       {open && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,16,9,0.55)", zIndex: 110 }} />
-          <div style={{ position: "fixed", top: 0, left: 0, bottom: 0, width: 264, background: C.dark, zIndex: 120, display: "flex", flexDirection: "column", padding: "20px 16px", boxSizing: "border-box" }}>
+          <div className="gb-overlay" onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,16,9,0.55)", zIndex: 110 }} />
+          <div className="gb-drawer" style={{ position: "fixed", top: 0, left: 0, bottom: 0, width: 264, background: C.dark, zIndex: 120, display: "flex", flexDirection: "column", padding: "20px 16px", boxSizing: "border-box" }}>
             <div style={{ marginBottom: 28, paddingLeft: 8, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
               <div>
                 <Logo size="md" on="dark" />
@@ -363,7 +372,7 @@ const Nav = ({ active, setActive, onLogout, userName }) => {
               </button>
             </div>
             {navLinks(() => setOpen(false))}
-            {userFooter}
+            {userFooter(() => setOpen(false))}
           </div>
         </>
       )}
@@ -379,7 +388,7 @@ const Nav = ({ active, setActive, onLogout, userName }) => {
           <div style={{ marginTop: 6, fontSize: 11, color: C.darkInk2, fontFamily: "system-ui", letterSpacing: "0.06em", textTransform: "uppercase" }}>AAYL Toolkit</div>
         </div>
         {navLinks()}
-        {userFooter}
+        {userFooter()}
       </div>
       {/* Spacer */}
       <div style={{ width: 240, flexShrink: 0 }} />
@@ -421,7 +430,7 @@ const Dashboard = ({ userData, setActive, onPrint }) => {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 20 }}>
-        {NAV_ITEMS.filter(n => n.id !== "dashboard" && n.id !== "account").map(item => (
+        {NAV_ITEMS.filter(n => n.id !== "dashboard").map(item => (
           <Card key={item.id} style={{ cursor: "pointer" }} onClick={() => setActive(item.id)}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
               <div style={{ width: 40, height: 40, borderRadius: 10, background: C.bg2, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -759,7 +768,7 @@ const Contacts = ({ data, onSave }) => {
 
       {/* Add contact form */}
       {adding && (
-        <Card style={{ marginBottom: 20, border: `2px solid ${C.accent}` }}>
+        <Card className="gb-pop" style={{ marginBottom: 20, border: `2px solid ${C.accent}` }}>
           <h4 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 700, color: C.ink, fontFamily: "system-ui" }}>New contact</h4>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginBottom: 14 }}>
             <Input label="Name *" value={newContact.name} onChange={v => setNewContact(c => ({ ...c, name: v }))} placeholder="Dr. Jane Smith" />
@@ -768,7 +777,7 @@ const Contacts = ({ data, onSave }) => {
             <Input label="Email" value={newContact.email} onChange={v => setNewContact(c => ({ ...c, email: v }))} placeholder="dr.smith@clinic.com" />
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: C.ink2, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "system-ui", display: "block", marginBottom: 6 }}>Category</label>
-              <select value={newContact.category} onChange={e => setNewContact(c => ({ ...c, category: e.target.value }))}
+              <select className="gb-input" value={newContact.category} onChange={e => setNewContact(c => ({ ...c, category: e.target.value }))}
                 style={{ border: `1px solid ${C.line2}`, borderRadius: 10, padding: "11px 16px", fontSize: 15, fontFamily: "system-ui", color: C.ink, background: C.paper, width: "100%" }}>
                 {CONTACT_CATEGORIES.map(cat => <option key={cat}>{cat}</option>)}
               </select>
@@ -901,66 +910,76 @@ const Account = ({ user, userData, onPrint }) => {
     setPwState({ info: "Password updated." });
   };
 
-  const downloadData = () => {
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      account: { name: user.name, email: user.email },
-      organizer: userData.organizer || {},
-      checklists: userData.checklists || {},
-      contacts: userData.contacts || [],
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "graybrief-toolkit-data.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const memberSince = user.createdAt
+    ? new Date(user.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    : null;
 
   return (
-    <div>
+    <div style={{ maxWidth: 620 }}>
       <SectionHeader eyebrow="My Account" title="Profile and security" />
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 20, alignItems: "start" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* Identity header */}
+        <Card style={{ padding: "22px 28px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: C.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <span style={{ fontSize: 24, fontWeight: 700, color: "#fff", fontFamily: "system-ui" }}>{(user.name || user.email)?.[0]?.toUpperCase()}</span>
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, fontFamily: "system-ui", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
+              <div style={{ fontSize: 13, color: C.ink3, fontFamily: "system-ui", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.email}</div>
+              {memberSince && <div style={{ fontSize: 12, color: C.ink3, fontFamily: "system-ui", marginTop: 2 }}>Member since {memberSince}</div>}
+            </div>
+          </div>
+        </Card>
+
         <Card>
           <h3 style={h3}>Profile</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <Input label="Your name" value={name} onChange={setName} placeholder="Ashley" />
+            <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <Input label="Your name" value={name} onChange={setName} placeholder="Ashley" />
+              </div>
+              <Btn size="sm" onClick={saveName} disabled={busy} style={{ marginBottom: 3 }}>Save</Btn>
+            </div>
             <Msg {...nameState} />
-            <div><Btn size="sm" onClick={saveName} disabled={busy}>Save name</Btn></div>
           </div>
         </Card>
 
         <Card>
           <h3 style={h3}>Email</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <Input label="Email address" type="email" value={email} onChange={setEmail} />
+            <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <Input label="Email address" type="email" value={email} onChange={setEmail} />
+              </div>
+              <Btn size="sm" onClick={saveEmail} disabled={busy} style={{ marginBottom: 3 }}>Change</Btn>
+            </div>
             <div style={hint}>Changing your email sends a confirmation link first — nothing switches over until you click it.</div>
             <Msg {...emailState} />
-            <div><Btn size="sm" onClick={saveEmail} disabled={busy}>Change email</Btn></div>
           </div>
         </Card>
 
         <Card>
           <h3 style={h3}>Password</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <Input label="New password" type="password" value={pw} onChange={setPw} placeholder="6+ characters" />
-            <Input label="Confirm new password" type="password" value={pw2} onChange={setPw2} placeholder="Repeat it" />
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
+              <Input label="New password" type="password" value={pw} onChange={setPw} placeholder="6+ characters" />
+              <Input label="Confirm new password" type="password" value={pw2} onChange={setPw2} placeholder="Repeat it" />
+            </div>
             <Msg {...pwState} />
             <div><Btn size="sm" onClick={savePassword} disabled={busy}>Update password</Btn></div>
           </div>
         </Card>
 
-        <Card>
-          <h3 style={h3}>Your data</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div style={{ fontSize: 13, color: C.ink2, fontFamily: "system-ui", lineHeight: 1.55 }}>
-              Your toolkit belongs to you. Print it as The One Folder, or download a full copy of everything you've saved.
+        <Card style={{ background: C.dark, border: "none" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.darkInk, fontFamily: "system-ui", marginBottom: 4 }}>The One Folder</div>
+              <div style={{ fontSize: 13, color: C.darkInk2, fontFamily: "system-ui", lineHeight: 1.5 }}>Print your whole toolkit — or save it as a PDF — and hand it to your family.</div>
             </div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <Btn size="sm" onClick={onPrint}><Icon name="file" size={14} color="#fff" /> The One Folder — Print / PDF</Btn>
-              <Btn size="sm" variant="ghost" onClick={downloadData}>Download my data (JSON)</Btn>
-            </div>
+            <Btn variant="accent" size="sm" onClick={onPrint} style={{ flexShrink: 0 }}>
+              <Icon name="file" size={14} color="#fff" /> Print / PDF
+            </Btn>
           </div>
         </Card>
       </div>
@@ -1163,11 +1182,13 @@ export default function App() {
     <div style={{ display: "flex", minHeight: "100vh", background: C.bg, fontFamily: "system-ui, sans-serif" }}>
       <Nav active={activeNav} setActive={setActiveNav} onLogout={onLogout} userName={user.name} />
       <main style={{ flex: 1, padding: isMobile ? "76px 16px 32px" : "40px 48px", maxWidth: 1000, minHeight: "100vh", overflowY: "auto", boxSizing: "border-box", minWidth: 0 }}>
-        {activeNav === "dashboard" && <Dashboard userData={userData} setActive={setActiveNav} onPrint={() => setPrintOpen(true)} />}
-        {activeNav === "organizer" && <Organizer data={userData.organizer} onSave={v => saveSection("organizer", v)} />}
-        {activeNav === "checklists" && <Checklists data={userData.checklists} onSave={v => saveSection("checklists", v)} />}
-        {activeNav === "contacts" && <Contacts data={userData.contacts} onSave={v => saveSection("contacts", v)} />}
-        {activeNav === "account" && <Account user={user} userData={userData} onPrint={() => setPrintOpen(true)} />}
+        <div key={activeNav} className="gb-page">
+          {activeNav === "dashboard" && <Dashboard userData={userData} setActive={setActiveNav} onPrint={() => setPrintOpen(true)} />}
+          {activeNav === "organizer" && <Organizer data={userData.organizer} onSave={v => saveSection("organizer", v)} />}
+          {activeNav === "checklists" && <Checklists data={userData.checklists} onSave={v => saveSection("checklists", v)} />}
+          {activeNav === "contacts" && <Contacts data={userData.contacts} onSave={v => saveSection("contacts", v)} />}
+          {activeNav === "account" && <Account user={user} userData={userData} onPrint={() => setPrintOpen(true)} />}
+        </div>
       </main>
     </div>
   );

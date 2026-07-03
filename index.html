@@ -19,6 +19,26 @@
       html, body, #root { margin: 0; padding: 0; min-height: 100%; }
       body { background: #F3EEE4; }
       * { -webkit-tap-highlight-color: transparent; }
+
+      /* Interaction polish (overrides inline styles on hover/focus only) */
+      .gb-btn { transition: transform .15s ease, filter .15s ease, opacity .15s ease; }
+      .gb-btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+      .gb-btn:active:not(:disabled) { transform: translateY(0) scale(.98); }
+      .gb-card { transition: box-shadow .2s ease, transform .2s ease; }
+      .gb-card[data-clickable]:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.09) !important; }
+      .gb-input:focus { border-color: #C2802F !important; box-shadow: 0 0 0 3px rgba(194,128,47,.14); }
+      .gb-navbtn { transition: background .15s ease, color .15s ease; }
+      .gb-navbtn:not([data-active="true"]):hover { background: rgba(243,238,228,.08) !important; color: #F3EEE4 !important; }
+
+      @media (prefers-reduced-motion: no-preference) {
+        @keyframes gbFadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        @keyframes gbFade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes gbSlideIn { from { transform: translateX(-100%); } to { transform: none; } }
+        .gb-page { animation: gbFadeUp .3s ease both; }
+        .gb-pop { animation: gbFadeUp .25s ease both; }
+        .gb-overlay { animation: gbFade .2s ease both; }
+        .gb-drawer { animation: gbSlideIn .22s ease both; }
+      }
     </style>
   </head>
   <body>
