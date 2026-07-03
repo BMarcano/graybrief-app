@@ -21,6 +21,21 @@ const C = {
   green: "#27AE60",
 };
 
+// ── RESPONSIVE ────────────────────────────────────────────────
+// Single breakpoint: below 900px the sidebar becomes a top bar + drawer
+// and multi-column grids collapse to one column.
+const MOBILE_QUERY = "(max-width: 900px)";
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_QUERY);
+    const onChange = (e) => setIsMobile(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return isMobile;
+}
+
 // ── DATA LAYER (Supabase) ─────────────────────────────────────
 // One row per user in public.user_data: { user_id, organizer, checklists, contacts }.
 // Row-Level Security guarantees each user only ever sees their own row.
@@ -75,6 +90,8 @@ const Icon = ({ name, size = 18, color = "currentColor" }) => {
     trash: <><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></>,
     alert: <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>,
     user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
+    menu: <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>,
+    x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -85,11 +102,13 @@ const Icon = ({ name, size = 18, color = "currentColor" }) => {
 };
 
 // ── LOGO ──────────────────────────────────────────────────────
-const Logo = ({ size = "md" }) => {
+const Logo = ({ size = "md", on = "light" }) => {
   const s = size === "lg" ? { gray: 28, brief: 28 } : { gray: 18, brief: 18 };
+  // "Gray" must stay legible on the dark sidebar / top bar.
+  const grayColor = on === "dark" ? C.darkInk : C.ink;
   return (
     <span style={{ display: "inline-flex", alignItems: "baseline", gap: 1 }}>
-      <span style={{ fontFamily: "Georgia, serif", fontWeight: 700, fontSize: s.gray, color: C.ink, letterSpacing: "-0.03em" }}>Gray</span>
+      <span style={{ fontFamily: "Georgia, serif", fontWeight: 700, fontSize: s.gray, color: grayColor, letterSpacing: "-0.03em" }}>Gray</span>
       <span style={{ fontFamily: "Georgia, serif", fontStyle: "italic", fontWeight: 400, fontSize: s.brief, color: C.accent, letterSpacing: "-0.02em" }}>Brief</span>
     </span>
   );
@@ -290,34 +309,76 @@ const NAV_ITEMS = [
 ];
 
 const Nav = ({ active, setActive, onLogout, userName }) => {
+  const isMobile = useIsMobile();
+  const [open, setOpen] = useState(false);
+
+  const navLinks = (onNavigate) => (
+    <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+      {NAV_ITEMS.map(item => (
+        <button key={item.id} onClick={() => { setActive(item.id); if (onNavigate) onNavigate(); }}
+          style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 12px", borderRadius: 10, border: "none", cursor: "pointer", fontFamily: "system-ui", fontSize: 14, fontWeight: active === item.id ? 600 : 400, transition: "all 0.15s", background: active === item.id ? C.accent : "transparent", color: active === item.id ? "#fff" : C.darkInk2, textAlign: "left" }}>
+          <Icon name={item.icon} size={16} color={active === item.id ? "#fff" : C.darkInk2} />
+          {item.label}
+        </button>
+      ))}
+    </nav>
+  );
+
+  const userFooter = (
+    <div style={{ borderTop: `1px solid #2A2720`, paddingTop: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, paddingLeft: 4 }}>
+        <div style={{ width: 32, height: 32, borderRadius: "50%", background: C.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "system-ui" }}>{userName?.[0]?.toUpperCase()}</span>
+        </div>
+        <div style={{ fontSize: 13, color: C.darkInk, fontFamily: "system-ui", fontWeight: 500 }}>{userName}</div>
+      </div>
+      <button onClick={onLogout} style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", border: "none", cursor: "pointer", color: C.darkInk2, fontSize: 13, fontFamily: "system-ui", padding: "8px 4px" }}>
+        <Icon name="logout" size={14} color={C.darkInk2} /> Sign out
+      </button>
+    </div>
+  );
+
+  if (isMobile) return (
+    <>
+      {/* Mobile top bar */}
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 56, background: C.dark, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", zIndex: 100, boxSizing: "border-box" }}>
+        <Logo size="md" on="dark" />
+        <button aria-label="Menu" onClick={() => setOpen(o => !o)} style={{ background: "transparent", border: "none", cursor: "pointer", padding: 8, display: "flex" }}>
+          <Icon name={open ? "x" : "menu"} size={22} color={C.darkInk} />
+        </button>
+      </div>
+      {/* Drawer */}
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(17,16,9,0.55)", zIndex: 110 }} />
+          <div style={{ position: "fixed", top: 0, left: 0, bottom: 0, width: 264, background: C.dark, zIndex: 120, display: "flex", flexDirection: "column", padding: "20px 16px", boxSizing: "border-box" }}>
+            <div style={{ marginBottom: 28, paddingLeft: 8, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+              <div>
+                <Logo size="md" on="dark" />
+                <div style={{ marginTop: 6, fontSize: 11, color: C.darkInk2, fontFamily: "system-ui", letterSpacing: "0.06em", textTransform: "uppercase" }}>AAYL Toolkit</div>
+              </div>
+              <button aria-label="Close menu" onClick={() => setOpen(false)} style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>
+                <Icon name="x" size={18} color={C.darkInk2} />
+              </button>
+            </div>
+            {navLinks(() => setOpen(false))}
+            {userFooter}
+          </div>
+        </>
+      )}
+    </>
+  );
+
   return (
     <>
       {/* Desktop sidebar */}
       <div style={{ width: 240, minHeight: "100vh", background: C.dark, display: "flex", flexDirection: "column", padding: "24px 16px", position: "fixed", left: 0, top: 0, bottom: 0, zIndex: 100 }}>
         <div style={{ marginBottom: 36, paddingLeft: 8 }}>
-          <Logo size="md" />
+          <Logo size="md" on="dark" />
           <div style={{ marginTop: 6, fontSize: 11, color: C.darkInk2, fontFamily: "system-ui", letterSpacing: "0.06em", textTransform: "uppercase" }}>AAYL Toolkit</div>
         </div>
-        <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-          {NAV_ITEMS.map(item => (
-            <button key={item.id} onClick={() => setActive(item.id)}
-              style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 12px", borderRadius: 10, border: "none", cursor: "pointer", fontFamily: "system-ui", fontSize: 14, fontWeight: active === item.id ? 600 : 400, transition: "all 0.15s", background: active === item.id ? C.accent : "transparent", color: active === item.id ? "#fff" : C.darkInk2, textAlign: "left" }}>
-              <Icon name={item.icon} size={16} color={active === item.id ? "#fff" : C.darkInk2} />
-              {item.label}
-            </button>
-          ))}
-        </nav>
-        <div style={{ borderTop: `1px solid #2A2720`, paddingTop: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, paddingLeft: 4 }}>
-            <div style={{ width: 32, height: 32, borderRadius: "50%", background: C.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "system-ui" }}>{userName?.[0]?.toUpperCase()}</span>
-            </div>
-            <div style={{ fontSize: 13, color: C.darkInk, fontFamily: "system-ui", fontWeight: 500 }}>{userName}</div>
-          </div>
-          <button onClick={onLogout} style={{ display: "flex", alignItems: "center", gap: 8, background: "transparent", border: "none", cursor: "pointer", color: C.darkInk2, fontSize: 13, fontFamily: "system-ui", padding: "8px 4px" }}>
-            <Icon name="logout" size={14} color={C.darkInk2} /> Sign out
-          </button>
-        </div>
+        {navLinks()}
+        {userFooter}
       </div>
       {/* Spacer */}
       <div style={{ width: 240, flexShrink: 0 }} />
@@ -326,7 +387,8 @@ const Nav = ({ active, setActive, onLogout, userName }) => {
 };
 
 // ── DASHBOARD ─────────────────────────────────────────────────
-const Dashboard = ({ userData, setActive }) => {
+const Dashboard = ({ userData, setActive, onPrint }) => {
+  const isMobile = useIsMobile();
   const completedModules = Object.values(userData.checklists || {}).filter(m => {
     const items = Object.values(m);
     return items.length > 0 && items.every(Boolean);
@@ -348,7 +410,7 @@ const Dashboard = ({ userData, setActive }) => {
         <p style={{ marginTop: 8, fontSize: 16, color: C.ink2, fontFamily: "Georgia, serif", fontStyle: "italic" }}>Everything you need is here — before you need it.</p>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 32 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 16, marginBottom: 32 }}>
         {stats.map(s => (
           <Card key={s.label} style={{ cursor: "pointer", transition: "box-shadow 0.15s" }} onClick={() => setActive(s.nav)}>
             <div style={{ fontSize: 36, fontWeight: 700, color: C.accent, fontFamily: "Georgia, serif", marginBottom: 6 }}>{s.value}</div>
@@ -357,7 +419,7 @@ const Dashboard = ({ userData, setActive }) => {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 20 }}>
         {NAV_ITEMS.filter(n => n.id !== "dashboard").map(item => (
           <Card key={item.id} style={{ cursor: "pointer" }} onClick={() => setActive(item.id)}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
@@ -375,12 +437,15 @@ const Dashboard = ({ userData, setActive }) => {
         ))}
       </div>
 
-      <div style={{ marginTop: 28, padding: "20px 24px", background: C.dark, borderRadius: 16, display: "flex", alignItems: "center", gap: 16 }}>
+      <div style={{ marginTop: 28, padding: "20px 24px", background: C.dark, borderRadius: 16, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
         <div style={{ fontSize: 28, fontFamily: "Georgia, serif", color: C.accent, fontWeight: 700 }}>!</div>
-        <div>
+        <div style={{ flex: 1, minWidth: 220 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: C.darkInk, fontFamily: "system-ui", marginBottom: 4 }}>Share this toolkit with your family</div>
-          <div style={{ fontSize: 13, color: C.darkInk2, fontFamily: "system-ui" }}>At least two family members should know this information exists and where to find it.</div>
+          <div style={{ fontSize: 13, color: C.darkInk2, fontFamily: "system-ui" }}>At least two family members should know this information exists and where to find it. Print it — or save it as a PDF — and hand it over.</div>
         </div>
+        <Btn variant="accent" size="sm" onClick={onPrint} style={{ flexShrink: 0 }}>
+          <Icon name="file" size={14} color="#fff" /> The One Folder — Print / PDF
+        </Btn>
       </div>
     </div>
   );
@@ -461,6 +526,7 @@ const ORGANIZER_SECTIONS = [
 ];
 
 const Organizer = ({ data, onSave }) => {
+  const isMobile = useIsMobile();
   const [fields, setFields] = useState(data || {});
   const [saved, setSaved] = useState(false);
   const [activeSection, setActiveSection] = useState("aayl");
@@ -495,7 +561,7 @@ const Organizer = ({ data, onSave }) => {
 
       <Card>
         <h3 style={{ fontSize: 18, fontWeight: 700, color: C.ink, fontFamily: "system-ui", marginBottom: 20, marginTop: 0 }}>{section.title}</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16 }}>
           {section.fields.map(f => (
             <div key={f.id} style={{ gridColumn: f.id === "conditions" || f.id === "medications" || f.id === "obituaryNotes" ? "1 / -1" : undefined }}>
               {f.id === "conditions" || f.id === "medications" || f.id === "obituaryNotes"
@@ -531,6 +597,7 @@ const MODULES = [
 ];
 
 const Checklists = ({ data, onSave }) => {
+  const isMobile = useIsMobile();
   const [checks, setChecks] = useState(data || {});
   const [activeModule, setActiveModule] = useState("m01");
   const [saved, setSaved] = useState(false);
@@ -569,9 +636,9 @@ const Checklists = ({ data, onSave }) => {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 20, alignItems: "start" }}>
-        {/* Module list */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "280px 1fr", gap: 20, alignItems: "start" }}>
+        {/* Module list — horizontal scroll strip on mobile */}
+        <div style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: 6, overflowX: isMobile ? "auto" : "visible", paddingBottom: isMobile ? 6 : 0, WebkitOverflowScrolling: "touch" }}>
           {MODULES.map(m => {
             const mc = checks[m.id] || {};
             const done = m.items.filter(i => mc[i]).length;
@@ -579,7 +646,7 @@ const Checklists = ({ data, onSave }) => {
             const complete = pct === 100;
             return (
               <button key={m.id} onClick={() => setActiveModule(m.id)}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: `1px solid ${activeModule === m.id ? C.accent : C.line}`, background: activeModule === m.id ? "#FEF5E7" : C.paper, cursor: "pointer", textAlign: "left", transition: "all 0.15s" }}>
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: `1px solid ${activeModule === m.id ? C.accent : C.line}`, background: activeModule === m.id ? "#FEF5E7" : C.paper, cursor: "pointer", textAlign: "left", transition: "all 0.15s", minWidth: isMobile ? 230 : undefined, flexShrink: isMobile ? 0 : undefined }}>
                 <div style={{ width: 28, height: 28, borderRadius: "50%", border: `2px solid ${complete ? C.green : activeModule === m.id ? C.accent : C.line2}`, background: complete ? C.green : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   {complete && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                   {!complete && <span style={{ fontSize: 10, fontWeight: 700, color: activeModule === m.id ? C.accent : C.ink3, fontFamily: "system-ui" }}>{m.num}</span>}
@@ -631,6 +698,7 @@ const Checklists = ({ data, onSave }) => {
 const CONTACT_CATEGORIES = ["Medical", "Legal", "Financial", "Family", "Care Facility", "Government / Agency", "Other"];
 
 const Contacts = ({ data, onSave }) => {
+  const isMobile = useIsMobile();
   const [contacts, setContacts] = useState(data || []);
   const [adding, setAdding] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -648,6 +716,8 @@ const Contacts = ({ data, onSave }) => {
   };
 
   const remove = (id) => {
+    const target = contacts.find(c => c.id === id);
+    if (!window.confirm(`Remove ${target?.name || "this contact"} from your contacts?`)) return;
     const updated = contacts.filter(c => c.id !== id);
     setContacts(updated);
     save(updated);
@@ -670,7 +740,7 @@ const Contacts = ({ data, onSave }) => {
       {/* Built-in resources */}
       <Card style={{ marginBottom: 20, background: C.dark }}>
         <div style={{ fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase", color: C.darkInk2, fontFamily: "system-ui", fontWeight: 600, marginBottom: 14 }}>Always-available resources</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 10 }}>
           {[
             { name: "Eldercare Locator", phone: "1-800-677-1116", role: "Free local resource finder" },
             { name: "Medicare Helpline", phone: "1-800-633-4227", role: "Medicare questions" },
@@ -690,7 +760,7 @@ const Contacts = ({ data, onSave }) => {
       {adding && (
         <Card style={{ marginBottom: 20, border: `2px solid ${C.accent}` }}>
           <h4 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 700, color: C.ink, fontFamily: "system-ui" }}>New contact</h4>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginBottom: 14 }}>
             <Input label="Name *" value={newContact.name} onChange={v => setNewContact(c => ({ ...c, name: v }))} placeholder="Dr. Jane Smith" />
             <Input label="Role / relationship" value={newContact.role} onChange={v => setNewContact(c => ({ ...c, role: v }))} placeholder="Primary care physician" />
             <Input label="Phone *" value={newContact.phone} onChange={v => setNewContact(c => ({ ...c, phone: v }))} placeholder="(555) 000-0000" />
@@ -702,7 +772,7 @@ const Contacts = ({ data, onSave }) => {
                 {CONTACT_CATEGORIES.map(cat => <option key={cat}>{cat}</option>)}
               </select>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 24 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: isMobile ? 0 : 24 }}>
               <input type="checkbox" id="priority" checked={newContact.priority} onChange={e => setNewContact(c => ({ ...c, priority: e.target.checked }))} />
               <label htmlFor="priority" style={{ fontSize: 14, color: C.ink, fontFamily: "system-ui", cursor: "pointer" }}>Mark as priority contact</label>
             </div>
@@ -727,7 +797,7 @@ const Contacts = ({ data, onSave }) => {
       {priority.length > 0 && (
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: C.accent, fontFamily: "system-ui", fontWeight: 600, marginBottom: 12 }}>Priority contacts</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 14 }}>
             {priority.map(c => (
               <ContactCard key={c.id} contact={c} onRemove={remove} catColor={catColor} />
             ))}
@@ -738,7 +808,7 @@ const Contacts = ({ data, onSave }) => {
       {rest.length > 0 && (
         <div>
           <div style={{ fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: C.ink3, fontFamily: "system-ui", fontWeight: 600, marginBottom: 12 }}>All contacts</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 14 }}>
             {rest.map(c => (
               <ContactCard key={c.id} contact={c} onRemove={remove} catColor={catColor} />
             ))}
@@ -767,14 +837,140 @@ const ContactCard = ({ contact, onRemove, catColor }) => (
   </Card>
 );
 
+// ── THE ONE FOLDER (print / PDF export) ───────────────────────
+// Renders the whole toolkit as a clean printable document. Empty fields
+// print as blank lines so family members can fill them in by hand.
+const PRINT_RESOURCES = [
+  { name: "Eldercare Locator", phone: "1-800-677-1116", role: "Free local resource finder" },
+  { name: "Medicare Helpline", phone: "1-800-633-4227", role: "Medicare questions" },
+  { name: "Social Security", phone: "1-800-772-1213", role: "SSA notifications + benefits" },
+  { name: "VA Benefits", phone: "1-800-827-1000", role: "Veterans benefits" },
+];
+
+const PrintFolder = ({ userData, userName, onClose }) => {
+  useEffect(() => {
+    const t = setTimeout(() => window.print(), 400);
+    return () => clearTimeout(t);
+  }, []);
+
+  const org = userData.organizer || {};
+  const contacts = userData.contacts || [];
+  const checks = userData.checklists || {};
+  const ordered = [...contacts.filter(c => c.priority), ...contacts.filter(c => !c.priority)];
+  const generated = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
+  const h2 = { fontSize: 15, fontFamily: "Georgia, serif", color: "#1A1714", borderBottom: "1.5px solid #C8BCA1", paddingBottom: 5, margin: "0 0 2px" };
+  const label = { fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: "#847A6C", fontFamily: "system-ui, sans-serif", width: 230, flexShrink: 0, paddingTop: 3 };
+  const value = { fontSize: 13, fontFamily: "system-ui, sans-serif", color: "#1A1714", flex: 1, minHeight: 17, lineHeight: 1.45, whiteSpace: "pre-wrap" };
+
+  return (
+    <div style={{ background: "#fff", minHeight: "100vh" }}>
+      <style>{`@page { margin: 14mm; } @media print { .no-print { display: none !important; } }`}</style>
+      {/* Screen-only toolbar */}
+      <div className="no-print" style={{ position: "sticky", top: 0, zIndex: 10, background: C.dark, padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <span style={{ color: C.darkInk, fontFamily: "system-ui, sans-serif", fontSize: 13 }}>
+          Print preview — in the print dialog choose "Save as PDF" to download it.
+        </span>
+        <span style={{ display: "flex", gap: 10 }}>
+          <Btn size="sm" variant="accent" onClick={() => window.print()}>Print / Save as PDF</Btn>
+          <Btn size="sm" variant="ghost" onClick={onClose} style={{ color: C.darkInk, border: "1px solid #4A4239" }}>Back to app</Btn>
+        </span>
+      </div>
+
+      <div style={{ maxWidth: 740, margin: "0 auto", padding: "36px 28px 48px" }}>
+        {/* Header */}
+        <div style={{ borderBottom: "3px solid #1A1714", paddingBottom: 18 }}>
+          <Logo size="lg" />
+          <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "Georgia, serif", color: "#1A1714", marginTop: 10 }}>The One Folder</div>
+          <div style={{ fontSize: 13, fontFamily: "system-ui, sans-serif", color: "#4A4239", marginTop: 6 }}>
+            Prepared by {userName} · {generated}
+          </div>
+          <div style={{ fontSize: 12, fontFamily: "system-ui, sans-serif", color: "#847A6C", marginTop: 4, fontStyle: "italic" }}>
+            Keep a printed copy somewhere safe — and make sure at least two family members know where it is. Blank lines can be filled in by hand.
+          </div>
+        </div>
+
+        {/* Organizer sections */}
+        {ORGANIZER_SECTIONS.map(sec => (
+          <section key={sec.id} style={{ marginTop: 22, breakInside: "avoid" }}>
+            <h2 style={h2}>{sec.title}</h2>
+            {sec.fields.map(f => (
+              <div key={f.id} style={{ display: "flex", gap: 14, padding: "7px 0", borderBottom: "1px solid #EDE6D6", alignItems: "flex-start" }}>
+                <div style={label}>{f.label}</div>
+                <div style={value}>{(org[f.id] || "").toString().trim()}</div>
+              </div>
+            ))}
+          </section>
+        ))}
+
+        {/* Emergency contacts */}
+        <section style={{ marginTop: 26, breakInside: "avoid" }}>
+          <h2 style={h2}>Emergency Contacts</h2>
+          {ordered.length === 0 && (
+            <div style={{ fontSize: 12, fontFamily: "system-ui, sans-serif", color: "#847A6C", padding: "8px 0" }}>No contacts saved yet.</div>
+          )}
+          {ordered.map(c => (
+            <div key={c.id} style={{ padding: "8px 0", borderBottom: "1px solid #EDE6D6", breakInside: "avoid" }}>
+              <div style={{ fontSize: 13.5, fontFamily: "system-ui, sans-serif", fontWeight: 700, color: "#1A1714" }}>
+                {c.priority ? "★ " : ""}{c.name}
+                {c.role && <span style={{ fontWeight: 400, color: "#4A4239" }}> — {c.role}</span>}
+                <span style={{ fontWeight: 400, color: "#847A6C", fontSize: 10.5, marginLeft: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>{c.category}</span>
+              </div>
+              <div style={{ fontSize: 13, fontFamily: "system-ui, sans-serif", color: "#1A1714", marginTop: 2 }}>
+                {c.phone}{c.email ? `  ·  ${c.email}` : ""}
+              </div>
+              {c.notes && <div style={{ fontSize: 12, fontFamily: "system-ui, sans-serif", color: "#4A4239", marginTop: 2 }}>{c.notes}</div>}
+            </div>
+          ))}
+        </section>
+
+        {/* National resources */}
+        <section style={{ marginTop: 22, breakInside: "avoid" }}>
+          <h2 style={h2}>Always-available national resources</h2>
+          {PRINT_RESOURCES.map(r => (
+            <div key={r.name} style={{ display: "flex", gap: 14, padding: "6px 0", borderBottom: "1px solid #EDE6D6", fontSize: 12.5, fontFamily: "system-ui, sans-serif", color: "#1A1714" }}>
+              <span style={{ width: 230, flexShrink: 0, fontWeight: 600 }}>{r.name}</span>
+              <span style={{ width: 130, flexShrink: 0 }}>{r.phone}</span>
+              <span style={{ color: "#4A4239" }}>{r.role}</span>
+            </div>
+          ))}
+        </section>
+
+        {/* Module progress */}
+        <section style={{ marginTop: 22, breakInside: "avoid" }}>
+          <h2 style={h2}>AAYL Playbook progress</h2>
+          {MODULES.map(m => {
+            const mc = checks[m.id] || {};
+            const done = m.items.filter(i => mc[i]).length;
+            const complete = done === m.items.length;
+            return (
+              <div key={m.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "5px 0", borderBottom: "1px solid #EDE6D6", fontSize: 12.5, fontFamily: "system-ui, sans-serif", color: "#1A1714" }}>
+                <span>{m.num} · {m.title}</span>
+                <span style={{ color: complete ? "#1E8449" : "#847A6C", fontWeight: 600, flexShrink: 0 }}>{complete ? "✓ complete" : `${done}/${m.items.length}`}</span>
+              </div>
+            );
+          })}
+        </section>
+
+        <div style={{ marginTop: 30, paddingTop: 12, borderTop: "1px solid #C8BCA1", fontSize: 11, fontFamily: "system-ui, sans-serif", color: "#847A6C", display: "flex", justifyContent: "space-between" }}>
+          <span>Generated with GrayBrief</span>
+          <span>app.graybrief.com</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── MAIN APP ──────────────────────────────────────────────────
 export default function App() {
+  const isMobile = useIsMobile();
   const [user, setUser] = useState(null);
   const [activeNav, setActiveNav] = useState("dashboard");
   const [userData, setUserData] = useState(DEFAULT_DATA);
   const [loading, setLoading] = useState(true);      // initial auth check
   const [dataReady, setDataReady] = useState(false); // signed-in user's data loaded
   const [recovery, setRecovery] = useState(false);   // password-reset flow
+  const [printOpen, setPrintOpen] = useState(false); // "The One Folder" print view
 
   // Auth: read the initial session and subscribe to changes.
   useEffect(() => {
@@ -824,6 +1020,8 @@ export default function App() {
 
   if (!user) return <AuthScreen />;
 
+  if (printOpen) return <PrintFolder userData={userData} userName={user.name} onClose={() => setPrintOpen(false)} />;
+
   if (!dataReady) return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <Logo size="lg" />
@@ -833,8 +1031,8 @@ export default function App() {
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: C.bg, fontFamily: "system-ui, sans-serif" }}>
       <Nav active={activeNav} setActive={setActiveNav} onLogout={onLogout} userName={user.name} />
-      <main style={{ flex: 1, padding: "40px 48px", maxWidth: 1000, minHeight: "100vh", overflowY: "auto" }}>
-        {activeNav === "dashboard" && <Dashboard userData={userData} setActive={setActiveNav} />}
+      <main style={{ flex: 1, padding: isMobile ? "76px 16px 32px" : "40px 48px", maxWidth: 1000, minHeight: "100vh", overflowY: "auto", boxSizing: "border-box", minWidth: 0 }}>
+        {activeNav === "dashboard" && <Dashboard userData={userData} setActive={setActiveNav} onPrint={() => setPrintOpen(true)} />}
         {activeNav === "organizer" && <Organizer data={userData.organizer} onSave={v => saveSection("organizer", v)} />}
         {activeNav === "checklists" && <Checklists data={userData.checklists} onSave={v => saveSection("checklists", v)} />}
         {activeNav === "contacts" && <Contacts data={userData.contacts} onSave={v => saveSection("contacts", v)} />}
