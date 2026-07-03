@@ -11,6 +11,7 @@ In the Supabase Dashboard (the GrayBrief project) → **Authentication → Email
 |---|---|---|
 | Confirm sign up | `confirm-signup.html` | `Welcome to GrayBrief — confirm your email` |
 | Reset password | `reset-password.html` | `Reset your GrayBrief password` |
+| Change Email Address | `email-change.html` | `Confirm your new GrayBrief email` |
 
 Paste the full file contents into the **Message body (HTML)** field (the HTML comments at
 the top are harmless, but you can strip them). Save, then send yourself a test signup and

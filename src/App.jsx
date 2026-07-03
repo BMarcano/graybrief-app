@@ -306,6 +306,7 @@ const NAV_ITEMS = [
   { id: "organizer", label: "Document Organizer", icon: "file" },
   { id: "checklists", label: "Checklists", icon: "check" },
   { id: "contacts", label: "Emergency Contacts", icon: "phone" },
+  { id: "account", label: "My Account", icon: "user" },
 ];
 
 const Nav = ({ active, setActive, onLogout, userName }) => {
@@ -420,7 +421,7 @@ const Dashboard = ({ userData, setActive, onPrint }) => {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 20 }}>
-        {NAV_ITEMS.filter(n => n.id !== "dashboard").map(item => (
+        {NAV_ITEMS.filter(n => n.id !== "dashboard" && n.id !== "account").map(item => (
           <Card key={item.id} style={{ cursor: "pointer" }} onClick={() => setActive(item.id)}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
               <div style={{ width: 40, height: 40, borderRadius: 10, background: C.bg2, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -837,6 +838,136 @@ const ContactCard = ({ contact, onRemove, catColor }) => (
   </Card>
 );
 
+// ── MY ACCOUNT ────────────────────────────────────────────────
+const Msg = ({ error, info }) => (
+  <>
+    {error && (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#FDEDEC", borderRadius: 10, color: C.red, fontSize: 13, fontFamily: "system-ui" }}>
+        <Icon name="alert" size={14} color={C.red} /> {error}
+      </div>
+    )}
+    {info && (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#EAFAF1", borderRadius: 10, color: "#1E8449", fontSize: 13, fontFamily: "system-ui" }}>
+        <Icon name="check" size={14} color="#1E8449" /> {info}
+      </div>
+    )}
+  </>
+);
+
+const Account = ({ user, userData, onPrint }) => {
+  const isMobile = useIsMobile();
+  const [name, setName] = useState(user.name === user.email ? "" : user.name);
+  const [nameState, setNameState] = useState({});
+  const [email, setEmail] = useState(user.email);
+  const [emailState, setEmailState] = useState({});
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [pwState, setPwState] = useState({});
+  const [busy, setBusy] = useState(false);
+
+  const h3 = { fontSize: 18, fontWeight: 700, color: C.ink, fontFamily: "system-ui", marginBottom: 16, marginTop: 0 };
+  const hint = { fontSize: 12, color: C.ink3, fontFamily: "system-ui", lineHeight: 1.5 };
+
+  const saveName = async () => {
+    setNameState({});
+    if (!name.trim()) { setNameState({ error: "Name can't be empty." }); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ data: { name: name.trim() } });
+    setBusy(false);
+    setNameState(error ? { error: error.message } : { info: "Name updated." });
+  };
+
+  const saveEmail = async () => {
+    setEmailState({});
+    const next = email.trim();
+    if (!next || next === user.email) { setEmailState({ error: "Enter a new email address first." }); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ email: next });
+    setBusy(false);
+    setEmailState(error
+      ? { error: error.message }
+      : { info: "Confirmation link sent — check your inboxes to finish the change." });
+  };
+
+  const savePassword = async () => {
+    setPwState({});
+    if (pw.length < 6) { setPwState({ error: "Password must be at least 6 characters." }); return; }
+    if (pw !== pw2) { setPwState({ error: "Passwords don't match." }); return; }
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    setBusy(false);
+    if (error) { setPwState({ error: error.message }); return; }
+    setPw(""); setPw2("");
+    setPwState({ info: "Password updated." });
+  };
+
+  const downloadData = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      account: { name: user.name, email: user.email },
+      organizer: userData.organizer || {},
+      checklists: userData.checklists || {},
+      contacts: userData.contacts || [],
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "graybrief-toolkit-data.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div>
+      <SectionHeader eyebrow="My Account" title="Profile and security" />
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 20, alignItems: "start" }}>
+        <Card>
+          <h3 style={h3}>Profile</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Input label="Your name" value={name} onChange={setName} placeholder="Ashley" />
+            <Msg {...nameState} />
+            <div><Btn size="sm" onClick={saveName} disabled={busy}>Save name</Btn></div>
+          </div>
+        </Card>
+
+        <Card>
+          <h3 style={h3}>Email</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Input label="Email address" type="email" value={email} onChange={setEmail} />
+            <div style={hint}>Changing your email sends a confirmation link first — nothing switches over until you click it.</div>
+            <Msg {...emailState} />
+            <div><Btn size="sm" onClick={saveEmail} disabled={busy}>Change email</Btn></div>
+          </div>
+        </Card>
+
+        <Card>
+          <h3 style={h3}>Password</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Input label="New password" type="password" value={pw} onChange={setPw} placeholder="6+ characters" />
+            <Input label="Confirm new password" type="password" value={pw2} onChange={setPw2} placeholder="Repeat it" />
+            <Msg {...pwState} />
+            <div><Btn size="sm" onClick={savePassword} disabled={busy}>Update password</Btn></div>
+          </div>
+        </Card>
+
+        <Card>
+          <h3 style={h3}>Your data</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ fontSize: 13, color: C.ink2, fontFamily: "system-ui", lineHeight: 1.55 }}>
+              Your toolkit belongs to you. Print it as The One Folder, or download a full copy of everything you've saved.
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <Btn size="sm" onClick={onPrint}><Icon name="file" size={14} color="#fff" /> The One Folder — Print / PDF</Btn>
+              <Btn size="sm" variant="ghost" onClick={downloadData}>Download my data (JSON)</Btn>
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
 // ── THE ONE FOLDER (print / PDF export) ───────────────────────
 // Renders the whole toolkit as a clean printable document. Empty fields
 // print as blank lines so family members can fill them in by hand.
@@ -1036,6 +1167,7 @@ export default function App() {
         {activeNav === "organizer" && <Organizer data={userData.organizer} onSave={v => saveSection("organizer", v)} />}
         {activeNav === "checklists" && <Checklists data={userData.checklists} onSave={v => saveSection("checklists", v)} />}
         {activeNav === "contacts" && <Contacts data={userData.contacts} onSave={v => saveSection("contacts", v)} />}
+        {activeNav === "account" && <Account user={user} userData={userData} onPrint={() => setPrintOpen(true)} />}
       </main>
     </div>
   );
