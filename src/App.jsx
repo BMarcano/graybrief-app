@@ -312,7 +312,7 @@ const NAV_ITEMS = [
   { id: "contacts", label: "Emergency Contacts", icon: "phone" },
 ];
 
-const Nav = ({ active, setActive, onLogout, userName }) => {
+const Nav = ({ active, setActive, onLogout, userName, isAdmin }) => {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
 
@@ -326,6 +326,14 @@ const Nav = ({ active, setActive, onLogout, userName }) => {
           {item.label}
         </button>
       ))}
+      {isAdmin && (
+        <button className="gb-navbtn" data-active={active === "admin" ? "true" : "false"}
+          onClick={() => { setActive("admin"); if (onNavigate) onNavigate(); }}
+          style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 12px", borderRadius: 10, border: "none", cursor: "pointer", fontFamily: "system-ui", fontSize: 14, fontWeight: active === "admin" ? 600 : 400, transition: "all 0.15s", background: active === "admin" ? C.accent : "transparent", color: active === "admin" ? "#fff" : C.darkInk2, textAlign: "left" }}>
+          <Icon name="user" size={16} color={active === "admin" ? "#fff" : C.darkInk2} />
+          Admin
+        </button>
+      )}
     </nav>
   );
 
@@ -1111,6 +1119,94 @@ const PrintFolder = ({ userData, userName, onClose }) => {
   );
 };
 
+// ── ADMIN DASHBOARD ───────────────────────────────────────────
+// Visible only to admins (checked via the is_admin RPC). Shows account
+// metadata from the admin_overview RPC — never user-stored content.
+const AdminDashboard = () => {
+  const isMobile = useIsMobile();
+  const [overview, setOverview] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    supabase.rpc("admin_overview").then(({ data, error }) => {
+      if (error) { setError(error.message); return; }
+      setOverview(data);
+    });
+  }, []);
+
+  const fmt = (d) => {
+    if (!d) return "Never";
+    const date = new Date(d);
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  };
+
+  if (error) return (
+    <div>
+      <SectionHeader eyebrow="Admin" title="Accounts overview" />
+      <Card><div style={{ fontSize: 14, color: C.red, fontFamily: "system-ui" }}>Couldn't load admin data: {error}</div></Card>
+    </div>
+  );
+
+  if (!overview) return (
+    <div>
+      <SectionHeader eyebrow="Admin" title="Accounts overview" />
+      <Card><div style={{ fontSize: 14, color: C.ink3, fontFamily: "system-ui" }}>Loading...</div></Card>
+    </div>
+  );
+
+  const stats = [
+    { label: "Total users", value: overview.total_users },
+    { label: "New (7 days)", value: overview.new_last_7d },
+    { label: "New (30 days)", value: overview.new_last_30d },
+    { label: "Active (7 days)", value: overview.active_last_7d },
+  ];
+
+  return (
+    <div>
+      <SectionHeader eyebrow="Admin" title="Accounts overview" />
+
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 16, marginBottom: 28 }}>
+        {stats.map(s => (
+          <Card key={s.label} style={{ padding: 20 }}>
+            <div style={{ fontSize: 30, fontWeight: 700, color: C.accent, fontFamily: "Georgia, serif", marginBottom: 4 }}>{s.value}</div>
+            <div style={{ fontSize: 12, color: C.ink2, fontFamily: "system-ui" }}>{s.label}</div>
+          </Card>
+        ))}
+      </div>
+
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "18px 24px", borderBottom: `1px solid ${C.line}`, fontSize: 15, fontWeight: 700, color: C.ink, fontFamily: "system-ui" }}>
+          All accounts
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "system-ui" }}>
+            <thead>
+              <tr style={{ background: C.bg2 }}>
+                {["Name", "Email", "Signed up", "Last sign in"].map(h => (
+                  <th key={h} style={{ textAlign: "left", padding: "10px 24px", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: C.ink3, fontWeight: 600 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {overview.users.map((u, i) => (
+                <tr key={u.email + i} style={{ borderTop: `1px solid ${C.line}` }}>
+                  <td style={{ padding: "12px 24px", fontSize: 14, color: C.ink, fontWeight: 500 }}>{u.name || "—"}</td>
+                  <td style={{ padding: "12px 24px", fontSize: 14, color: C.ink2 }}>{u.email}</td>
+                  <td style={{ padding: "12px 24px", fontSize: 13, color: C.ink3 }}>{fmt(u.created_at)}</td>
+                  <td style={{ padding: "12px 24px", fontSize: 13, color: C.ink3 }}>{fmt(u.last_sign_in_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ padding: "12px 24px", borderTop: `1px solid ${C.line}`, fontSize: 12, color: C.ink3, fontFamily: "system-ui" }}>
+          Account metadata only. What people store inside the app stays private to each user.
+        </div>
+      </Card>
+    </div>
+  );
+};
+
 // ── MAIN APP ──────────────────────────────────────────────────
 export default function App() {
   const isMobile = useIsMobile();
@@ -1121,6 +1217,7 @@ export default function App() {
   const [dataReady, setDataReady] = useState(false); // signed-in user's data loaded
   const [recovery, setRecovery] = useState(false);   // password-reset flow
   const [printOpen, setPrintOpen] = useState(false); // "The One Folder" print view
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Auth: read the initial session and subscribe to changes.
   useEffect(() => {
@@ -1148,6 +1245,12 @@ export default function App() {
       if (mounted) { setUserData(data); setDataReady(true); }
     })();
     return () => { mounted = false; };
+  }, [user?.id]);
+
+  // Admin flag: checked server-side via the is_admin RPC.
+  useEffect(() => {
+    if (user) supabase.rpc("is_admin").then(({ data }) => setIsAdmin(!!data));
+    else setIsAdmin(false);
   }, [user?.id]);
 
   const saveSection = useCallback(async (section, value) => {
@@ -1180,7 +1283,7 @@ export default function App() {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: C.bg, fontFamily: "system-ui, sans-serif" }}>
-      <Nav active={activeNav} setActive={setActiveNav} onLogout={onLogout} userName={user.name} />
+      <Nav active={activeNav} setActive={setActiveNav} onLogout={onLogout} userName={user.name} isAdmin={isAdmin} />
       <main style={{ flex: 1, padding: isMobile ? "76px 16px 32px" : "40px 48px", maxWidth: 1000, minHeight: "100vh", overflowY: "auto", boxSizing: "border-box", minWidth: 0 }}>
         <div key={activeNav} className="gb-page">
           {activeNav === "dashboard" && <Dashboard userData={userData} setActive={setActiveNav} onPrint={() => setPrintOpen(true)} />}
@@ -1188,6 +1291,7 @@ export default function App() {
           {activeNav === "checklists" && <Checklists data={userData.checklists} onSave={v => saveSection("checklists", v)} />}
           {activeNav === "contacts" && <Contacts data={userData.contacts} onSave={v => saveSection("contacts", v)} />}
           {activeNav === "account" && <Account user={user} userData={userData} onPrint={() => setPrintOpen(true)} />}
+          {activeNav === "admin" && isAdmin && <AdminDashboard />}
         </div>
       </main>
     </div>
